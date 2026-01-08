@@ -1,0 +1,34 @@
+name: CI/CD - Sock Shop to AKS
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: sockshop-rg-46604
+          cluster-name: sockshop-aks-46604
+
+      - name: Deploy Sock Shop manifests
+        run: |
+          kubectl apply -n sock-shop -f deploy/kubernetes/complete-demo.yaml
+
+      - name: Show services
+        run: |
+          kubectl get svc -n sock-shop
