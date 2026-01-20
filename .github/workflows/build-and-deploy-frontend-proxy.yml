@@ -2,7 +2,7 @@ name: Build + Deploy Slim Frontend Proxy
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
     paths:
       - "frontend-proxy/**"
       - ".github/workflows/build-and-deploy-frontend-proxy.yml"
@@ -13,9 +13,9 @@ permissions:
 
 env:
   NAMESPACE: sock-shop
-  DEPLOYMENT: front-end
-  CONTAINER: front-end
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/sockshop-frontend-proxy
+  DEPLOYMENT: frontend-proxy
+  CONTAINER: frontend-proxy
+  IMAGE_NAME: ghcr.io/mekkislimy/sockshop-frontend-proxy
 
 jobs:
   build-push-deploy:
@@ -24,6 +24,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set TAG
+        run: echo "TAG=${GITHUB_SHA}" >> $GITHUB_ENV
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -31,15 +34,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image
-        run: |
-          TAG=${GITHUB_SHA}
-          docker build -t $IMAGE_NAME:$TAG ./frontend-proxy
-          docker push $IMAGE_NAME:$TAG
-          echo "TAG=$TAG" >> $GITHUB_ENV
+      - name: Build image
+        run: docker build -t "${IMAGE_NAME}:${TAG}" ./frontend-proxy
 
-      # ---- AKS auth: use your existing method in deploy.yml ----
-      # If you already have a working deploy workflow, we reuse the SAME secrets.
+      - name: Push image
+        run: docker push "${IMAGE_NAME}:${TAG}"
+
       - name: Azure Login
         uses: azure/login@v2
         with:
@@ -50,7 +50,13 @@ jobs:
         with:
           resource-group: sockshop-rg-30975
           cluster-name: sockshop-aks-30975
-      - name: Update front-end deployment image
+
+      - name: Ensure namespace exists
         run: |
-          kubectl -n $NAMESPACE set image deployment/$DEPLOYMENT $CONTAINER=$IMAGE_NAME:${TAG}
-          kubectl -n $NAMESPACE rollout status deployment/$DEPLOYMENT --timeout=120s
+          kubectl get ns "${NAMESPACE}" || kubectl create ns "${NAMESPACE}"
+
+      - name: Deploy new image
+        run: |
+          echo "Deploying ${IMAGE_NAME}:${TAG}"
+          kubectl -n "${NAMESPACE}" set image "deployment/${DEPLOYMENT}" "${CONTAINER}=${IMAGE_NAME}:${TAG}"
+          kubectl -n "${NAMESPACE}" rollout status "deployment/${DEPLOYMENT}" --timeout=300s
