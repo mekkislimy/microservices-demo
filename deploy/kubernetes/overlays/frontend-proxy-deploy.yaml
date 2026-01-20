@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-proxy
+  namespace: sock-shop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend-proxy
+      name: frontend-proxy
+  template:
+    metadata:
+      labels:
+        app: frontend-proxy
+        name: frontend-proxy
+    spec:
+      containers:
+        - name: frontend-proxy
+          image: ghcr.io/mekkislimy/sockshop-frontend-proxy:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
