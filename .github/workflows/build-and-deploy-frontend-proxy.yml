@@ -1,0 +1,57 @@
+name: Build + Deploy Slim Frontend Proxy
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - "frontend-proxy/**"
+      - ".github/workflows/build-and-deploy-frontend-proxy.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  NAMESPACE: sock-shop
+  DEPLOYMENT: front-end
+  CONTAINER: front-end
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/sockshop-frontend-proxy
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        run: |
+          TAG=${GITHUB_SHA}
+          docker build -t $IMAGE_NAME:$TAG ./frontend-proxy
+          docker push $IMAGE_NAME:$TAG
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+      # ---- AKS auth: use your existing method in deploy.yml ----
+      # If you already have a working deploy workflow, we reuse the SAME secrets.
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
+          cluster-name:  ${{ secrets.AKS_CLUSTER_NAME }}
+
+      - name: Update front-end deployment image
+        run: |
+          kubectl -n $NAMESPACE set image deployment/$DEPLOYMENT $CONTAINER=$IMAGE_NAME:${TAG}
+          kubectl -n $NAMESPACE rollout status deployment/$DEPLOYMENT --timeout=120s
